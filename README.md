@@ -1,7 +1,7 @@
 # TokenManager Docker 版
 
 这是 TokenManager 的 Docker 容器化版本，功能与原版**完全一致**：
-
+![TokenManagerDocker](image.png)
 - ✅ Web GUI 界面（daisyUI，已内置全部前端资源，**内网无外网也能正常显示**）
 - ✅ 查询各 AI 平台 token 余额、一键查询所有余额
 - ✅ 用量统计（官方 API 支持的平台）
