@@ -1,0 +1,23 @@
+services:
+  token-manager:
+    build: .
+    image: token-manager:latest
+    # 只构建不拉取：避免部分NAS面板先去Docker Hub拉取token-manager镜像导致卡Pulling
+    pull_policy: build
+    container_name: token-manager
+    restart: unless-stopped
+    ports:
+      # 左边是外部访问端口，右边是容器内端口(勿改)
+      # 群晖DSM默认占用5000端口，故外部默认使用8080，浏览器访问 http://NAS_IP:8080
+      - "8888:5000"
+    environment:
+      - DATA_DIR=/data
+      - TZ=Asia/Shanghai
+      # 访问码：设置后打开界面和所有API都要求先输入；留空则不启用鉴权
+      # 例如改成: - ACCESS_CODE=你的访问码   （修改后执行 docker compose up -d 生效）
+      - ACCESS_CODE=
+      # 登录有效期（天）：有效期内打开页面免输访问码；0=关闭浏览器后即需重新登录
+      - SESSION_DAYS=30
+    volumes:
+      # 密钥等配置持久化到当前目录的data文件夹，容器更新重建后不丢失
+      - ./data:/data

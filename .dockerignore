@@ -1,0 +1,8 @@
+# 不进入构建上下文的文件
+data/
+**/__pycache__/
+**/*.pyc
+.git/
+.gitignore
+README.md
+*.md

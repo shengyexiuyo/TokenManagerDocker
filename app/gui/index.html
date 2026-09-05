@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Manager - AI API余额查询</title>
+    <script src="vendor/tailwind.js"></script>
+    <link href="vendor/daisyui.full.min.css" rel="stylesheet" type="text/css" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#a855f7',
+                        secondary: '#6366f1',
+                        accent: '#f472b6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 防止宽内容（如价格表）撑大布局视口导致手机端激活桌面三栏布局 */
+        html, body { overflow-x: clip; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Dark Theme (Default) */
+        [data-theme="dark"] {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #252542;
+            --bg-card: #1a1a2e;
+            --glass-bg: rgba(26, 26, 46, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #e5e7eb;
+            --text-muted: #9ca3af;
+            --gradient-start: #a855f7;
+            --gradient-end: #6366f1;
+            --hover-shadow: rgba(168, 85, 247, 0.15);
+            --card-border: #374151;
+        }
+
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #f1f5f9;
+            --bg-tertiary: #e2e8f0;
+            --bg-card: #ffffff;
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(0, 0, 0, 0.1);
+            --text-primary: #0f172a;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --gradient-start: #a855f7;
+            --gradient-end: #6366f1;
+            --hover-shadow: rgba(168, 85, 247, 0.2);
+            --card-border: #e2e8f0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-effect {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--hover-shadow);
+        }
+
+        .gradient-border {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            padding: 2px;
+            border-radius: 1rem;
+        }
+
+        .inner-card {
+            background: var(--bg-card);
+            border-radius: calc(1rem - 2px);
+            border: 1px solid var(--card-border);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--card-border);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .input-bordered {
+            background-color: var(--bg-tertiary) !important;
+            border-color: var(--card-border) !important;
+            color: var(--text-primary) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .input-bordered:focus {
+            border-color: var(--gradient-start) !important;
+        }
+
+        .input::placeholder {
+            color: var(--text-muted) !important;
+        }
+
+        /* 手机端适配：紧凑留白 + 隐藏页面滚动条占位（内容完全居中） */
+        @media (max-width: 640px) {
+            html { scrollbar-width: none; }
+            html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
+            main.px-6, header .px-6 { padding-left: 1rem; padding-right: 1rem; }
+            main.py-8 { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+            header .text-xl { font-size: 1.05rem; }
+            header .text-sm { font-size: 11px; }
+            header .w-12 { width: 2.5rem; height: 2.5rem; }
+            header .gap-4 { gap: 0.6rem; }
+            header .btn { padding: 4px 10px; font-size: 12px; }
+        }
+
+        .provider-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .provider-btn {
+            transition: all 0.3s ease;
+            border-color: var(--card-border) !important;
+            background-color: var(--bg-secondary) !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .provider-btn:hover {
+            transform: scale(1.05);
+            border-color: var(--gradient-start) !important;
+        }
+
+        .provider-btn.active {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
+            border-color: transparent !important;
+            color: white !important;
+        }
+
+        .saved-key-item {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--card-border);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .saved-key-item:hover {
+            background-color: var(--bg-secondary);
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(168, 85, 247, 0.2);
+            border-top-color: var(--gradient-start);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(168, 85, 247, 0.6); }
+        }
+
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+        /* Override daisyUI theme styles for light mode */
+        [data-theme="light"] .btn-ghost {
+            color: var(--text-secondary) !important;
+        }
+
+        [data-theme="light"] .btn-ghost:hover {
+            background-color: var(--bg-tertiary) !important;
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="light"] .badge {
+            border-color: var(--card-border);
+        }
+
+        [data-theme="light"] .modal-box {
+            background-color: var(--bg-card) !important;
+            border: 1px solid var(--card-border);
+        }
+
+        [data-theme="light"] .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+        }
+
+        [data-theme="light"] .text-gray-400,
+        [data-theme="light"] .text-gray-500 {
+            color: var(--text-muted) !important;
+        }
+
+        [data-theme="light"] .text-white {
+            color: var(--text-primary) !important;
+        }
+
+        /* Stat value gradient text */
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+        .toast {
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Header -->
+    <header class="glass-effect sticky top-0 z-40">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Token Manager</h1>
+                        <p class="text-sm opacity-60">AI API 余额查询工具 <span class="text-xs opacity-50 align-middle">v1.3</span></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button id="logout-btn" onclick="logout()" class="btn btn-ghost btn-sm gap-2 hidden">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                        </svg>
+                        退出登录
+                    </button>
+                    <button id="lang-btn" onclick="toggleLang()" class="btn btn-ghost btn-sm font-semibold">EN</button>
+                    <button onclick="toggleTheme()" class="btn btn-ghost btn-circle">
+                        <svg id="theme-icon-dark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                        <svg id="theme-icon-light" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- 版本一致性警告 -->
+    <div id="version-warn" class="hidden">
+        <div class="alert alert-warning rounded-none text-sm justify-center">
+            <span>前后端版本不一致，部分功能不可用。请在 NAS 上重新构建：docker compose up -d --build，然后强制刷新本页（Ctrl+F5）</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left Panel: Provider Selection & API Key -->
+            <div class="lg:col-span-1 space-y-6 min-w-0">
+                <!-- Provider Selection Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                </svg>
+                                选择服务商
+                            </h2>
+                            <button id="dashboard-btn" onclick="openDashboard()" disabled class="btn btn-sm btn-ghost gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                </svg>
+                                控制台
+                            </button>
+                        </div>
+                        <div id="provider-grid" class="provider-grid">
+                            <!-- Providers will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Key Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            API 密钥
+                        </h2>
+                        <div class="space-y-4">
+                            <!-- 自定义服务商配置（仅选择"自定义"时显示） -->
+                            <div id="custom-config" class="hidden space-y-3 stat-card p-4 rounded-xl">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-sm font-semibold">自定义服务商配置</p>
+                                    <span class="badge badge-ghost badge-sm">OpenAI 兼容</span>
+                                </div>
+                                <input id="custom-name" type="text" placeholder="显示名称（默认：自定义）" class="input input-bordered input-sm w-full"/>
+                                <input id="custom-base-url" type="text" placeholder="API 地址，如 https://api.example.com/v1" class="input input-bordered input-sm w-full"/>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input id="custom-balance-path" type="text" placeholder="余额路径 默认/dashboard/billing/subscription" class="input input-bordered input-sm w-full"/>
+                                    <input id="custom-usage-path" type="text" placeholder="用量路径 默认/dashboard/billing/usage" class="input input-bordered input-sm w-full"/>
+                                </div>
+                                <input id="custom-currency" type="text" placeholder="货币单位（默认 USD）" class="input input-bordered input-sm w-full"/>
+                                <p class="text-xs opacity-50">按中转站(one-api/new-api)常规计费接口实现：余额=订阅额度上限-当月用量。路径留空即用默认值。</p>
+                                <div class="flex gap-2">
+                                    <button onclick="saveCustomConfig()" class="btn btn-secondary btn-sm flex-1">保存配置</button>
+                                    <button id="custom-delete-btn" onclick="deleteCustomProvider()" class="btn btn-error btn-sm hidden">删除服务商</button>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <input type="password" id="api-key" placeholder="输入或粘贴您的 API Key" 
+                                    class="input input-bordered w-full border-gray-600 focus:border-primary focus:outline-none pr-20"/>
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
+                                    <button onclick="copyApiKey()" class="opacity-60 hover:text-success transition-colors" title="复制">
+                                        <svg id="copy-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                        </svg>
+                                        <svg id="copy-success-icon" class="w-5 h-5 hidden text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                    </button>
+                                    <button onclick="toggleKeyVisibility()" class="opacity-60 hover:text-primary transition-colors" title="显示/隐藏">
+                                        <svg id="eye-icon-show" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                        </svg>
+                                        <svg id="eye-icon-hide" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <input id="api-note" type="text" placeholder="备注（可选，随Token保存）"
+                                class="input input-bordered w-full border-gray-600 focus:border-primary focus:outline-none"/>
+                            <div class="flex gap-2">
+                                <button onclick="queryBalance()" class="btn btn-primary flex-1 gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                    查询余额
+                                </button>
+                                <button onclick="saveApiKey()" class="btn btn-ghost btn-square">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Saved Keys Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                </svg>
+                                已保存的Token
+                            </h2>
+                            <button onclick="queryAllBalances()" class="btn btn-sm btn-secondary gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                </svg>
+                                查询全部
+                            </button>
+                        </div>
+                        <div id="saved-keys" class="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
+                            <p class="opacity-60 text-sm">暂无保存的Token</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Results -->
+            <div class="lg:col-span-2 space-y-6 min-w-0">
+                <!-- Balance Result Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                余额信息
+                            </h2>
+                            <span id="balance-provider" class="badge badge-primary hidden">-</span>
+                        </div>
+                        <div id="balance-content">
+                            <div class="text-center py-12 opacity-60">
+                                <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                </svg>
+                                <p>选择一个服务商并输入 API Key 开始查询，或在左侧"已保存的密钥"中点击"查询全部"</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Balances Summary Card -->
+                <div id="all-balances-card" class="gradient-border hidden">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                </svg>
+                                全部余额汇总
+                            </h2>
+                            <span id="total-balance-currency" class="badge badge-secondary">CNY</span>
+                        </div>
+                        <div id="all-balances-content">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Usage Result Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                </svg>
+                                用量统计
+                            </h2>
+                            <button onclick="queryUsage()" class="btn btn-sm btn-ghost gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                刷新
+                            </button>
+                        </div>
+                        <div id="usage-content">
+                            <div class="text-center py-12 opacity-60">
+                                <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                </svg>
+                                <p>查询余额后自动显示用量统计</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Real-time Pricing Card -->
+                <div class="gradient-border">
+                    <div class="inner-card p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                                </svg>
+                                实时价格
+                            </h2>
+                            <button onclick="loadPricing(true)" class="btn btn-sm btn-ghost gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                刷新
+                            </button>
+                        </div>
+                        <div id="pricing-content">
+                            <div class="text-center py-12 opacity-60">
+                                <p>加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Modal -->
+    <dialog id="loading-modal" class="modal">
+        <div class="modal-box text-center">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p id="loading-text" class="text-lg">正在查询...</p>
+        </div>
+        <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- 备注编辑弹窗 -->
+    <dialog id="note-modal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-2">编辑备注</h3>
+            <textarea id="note-edit" class="textarea textarea-bordered w-full" rows="3"
+                placeholder="为这条Token写个备注，方便区分"></textarea>
+            <div class="modal-action">
+                <form method="dialog"><button class="btn btn-ghost">取消</button></form>
+                <button id="note-save" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- API Server Config -->
+    <script>
+        const API_BASE = '/api';
+        let currentProvider = null;
+        let providers = [];
+
+        // ===== 中英文双语（默认中文，en为英文界面） =====
+        let lang = localStorage.getItem('lang') || 'zh';
+        const I18N_EN = {
+        "AI API 余额查询工具": "AI API Balance Query Tool",
+        "退出登录": "Sign out",
+        "控制台": "Console",
+        "选择服务商": "Provider",
+        "API 密钥": "API Key",
+        "自定义服务商配置": "Custom Provider",
+        "OpenAI 兼容": "OpenAI compatible",
+        "查询余额": "Query Balance",
+        "已保存的密钥": "Saved Keys",
+        "查询全部": "Query All",
+        "余额信息": "Balance",
+        "全部余额汇总": "All Balances",
+        "用量统计": "Usage",
+        "刷新": "Refresh",
+        "实时价格": "Live Pricing",
+        "正在查询...": "Querying...",
+        "加载中...": "Loading...",
+        "使用": "Use",
+        "删除": "Delete",
+        "选择一个服务商并输入 API Key 开始查询，或在左侧\"已保存的密钥\"中点击\"查询全部\"": "Select a provider, enter your API Key and query, or click \"Query All\" in Saved Keys.",
+        "查询余额后自动显示用量统计": "Usage shows automatically after a balance query",
+        "按中转站(one-api/new-api)常规计费接口实现：余额=订阅额度上限-当月用量。路径留空即用默认值。": "Implements the common one-api/new-api billing convention: balance = subscription limit - monthly usage. Leave paths empty for defaults.",
+        "无法加载服务商列表，请确保后端服务正在运行": "Failed to load provider list. Make sure the backend is running",
+        "没有可复制的密钥": "No key to copy",
+        "已复制到剪贴板": "Copied to clipboard",
+        "复制失败": "Copy failed",
+        "删除失败": "Delete failed",
+        "正在查询": "Querying",
+        "个密钥的余额...": "keys...",
+        "查询失败": "Query failed",
+        "网络错误": "Network error",
+        "全部查询完成": "All queries finished",
+        "获取已保存密钥列表失败": "Failed to load saved keys",
+        "总可用余额": "Total Available",
+        "服务商数量": "Providers",
+        "充值余额": "Topped-up",
+        "请先选择一个服务商": "Select a provider first",
+        "请输入 API Key": "Enter your API Key",
+        "正在查询余额...": "Querying balance...",
+        "查询成功": "Query succeeded",
+        "网络错误，请确保后端服务正在运行": "Network error. Make sure the backend is running",
+        "请先选择一个服务商并查询余额": "Select a provider and run a balance query first",
+        "请先输入 API Key": "Enter your API Key first",
+        "保存失败": "Save failed",
+        "请填写 API 地址": "API URL is required",
+        "自定义服务商配置已保存": "Custom provider config saved",
+        "保存失败：网络错误": "Save failed: network error",
+        "删除服务商": "Delete Provider",
+        "删除成功": "Deleted",
+        "确认删除该自定义服务商？其已保存的密钥也会一并删除。": "Delete this custom provider? Its saved key will also be removed.",
+        "前后端版本不一致，部分功能不可用。请在 NAS 上重新构建：docker compose up -d --build，然后强制刷新本页（Ctrl+F5）": "Frontend/backend version mismatch. Rebuild on the NAS: docker compose up -d --build, then hard-refresh this page (Ctrl+F5)",
+        "可用余额": "Available",
+        "总余额": "Total",
+        "赠送额度": "Granted",
+        "余额信息不可用": "Balance unavailable",
+        "请检查 API Key 是否正确": "Please check your API Key",
+        "今日用量": "Today",
+        "本月用量": "This month",
+        "累计使用": "Total used",
+        "该服务商暂无用量数据": "No usage data for this provider",
+        "无法获取用量数据": "Usage data unavailable",
+        "数据来源": "Source",
+        "评估时间": "Evaluated at",
+        "北京时间": "Beijing time",
+        "模型": "Model",
+        "输入价": "Input",
+        "输出价": "Output",
+        "性价比": "Value score",
+        "峰谷": "Peak/Off-peak",
+        "谷": "Valley",
+        "峰": "Peak",
+        "重试": "Retry",
+        "获取价格数据失败": "Failed to fetch pricing data",
+        "价格为美元/百万tokens，按性价比降序排列；峰谷状态按北京时间判断": "USD per 1M tokens, sorted by value score; peak/off-peak judged by Beijing time",
+        "价格信息加载失败": "Failed to load pricing",
+        "暂无保存的Token": "No saved keys yet",
+        "没有已保存的Token": "No saved keys",
+        "确定要删除这个Token吗？": "Delete this saved key?",
+        "Token已保存": "Key saved",
+        "Token已删除": "Key deleted",
+        "复制": "Copy",
+        "备注": "Note",
+        "编辑备注": "Edit Note",
+        "保存": "Save",
+        "取消": "Cancel",
+        "该Token已存在，备注已更新": "Token already exists; note updated",
+        "备注（可选，随Token保存）": "Note (optional, saved with the token)",
+        "为这条Token写个备注，方便区分": "Write a note to distinguish this token"
+};
+        const PH_EN = {"输入或粘贴您的 API Key": "Enter or paste your API Key", "显示名称（默认：自定义）": "Display name (default: Custom)", "API 地址，如 https://api.example.com/v1": "API URL, e.g. https://api.example.com/v1", "余额路径 默认/dashboard/billing/subscription": "Balance path, default /dashboard/billing/subscription", "用量路径 默认/dashboard/billing/usage": "Usage path, default /dashboard/billing/usage", "货币单位（默认 USD）": "Currency (default USD)"};
+        const PNAME_EN = { '自定义': 'Custom', '智谱': 'Zhipu' };
+        const PNAME_FORCE = { '腾讯': 'Tencent' };
+        function t(s) { return lang === 'en' ? (I18N_EN[s] || s) : s; }
+        function pname(s) { return PNAME_FORCE[s] || (lang === 'en' ? (PNAME_EN[s] || s) : s); }
+        let _i18nNodes = null;
+        function _collectI18n() {
+            _i18nNodes = [];
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: n => n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            });
+            while (walker.nextNode()) {
+                const node = walker.currentNode;
+                const tag = node.parentElement && node.parentElement.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE') continue;
+                const s = node.textContent.trim();
+                if (I18N_EN[s]) _i18nNodes.push({ node: node, zh: node.textContent, key: s });
+                const ph = node.parentElement && node.parentElement.getAttribute && node.parentElement.tagName === 'INPUT' ? node.parentElement.getAttribute('placeholder') : null;
+                if (ph && PH_EN[ph]) _i18nNodes.push({ ph: node.parentElement, zh: ph });
+            }
+        }
+        function applyLang() {
+            if (!_i18nNodes) _collectI18n();
+            _i18nNodes.forEach(item => {
+                if (item.ph) { item.ph.setAttribute('placeholder', lang === 'en' ? PH_EN[item.zh] : item.zh); }
+                else { item.node.textContent = item.zh.replace(item.key, t(item.key)); }
+            });
+            document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+            const btn = document.getElementById('lang-btn');
+            if (btn) btn.textContent = lang === 'en' ? '中文' : 'EN';
+        }
+        function toggleLang() {
+            lang = lang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('lang', lang);
+            applyLang();
+            checkVersionMatch();
+            loadProviders();
+            loadSavedKeys();
+            loadPricing();
+        }
+
+
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.getAttribute('data-theme') === 'dark';
+            html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', !isDark);
+            document.getElementById('theme-icon-light').classList.toggle('hidden', isDark);
+            
+            localStorage.setItem('theme', isDark ? 'light' : 'dark');
+        }
+
+
+        // ===== 前后端版本一致性检测 =====
+        const EXPECT_VERSION = '1.3.0';
+        async function checkVersionMatch() {
+            try {
+                const r = await fetch(`${API_BASE}/version`);
+                const d = await r.json();
+                if (d.version !== EXPECT_VERSION) throw new Error('version mismatch');
+            } catch (error) {
+                const el = document.getElementById('version-warn');
+                if (el) el.classList.remove('hidden');
+            }
+        }
+
+        // Load saved theme
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', savedTheme !== 'dark');
+            document.getElementById('theme-icon-light').classList.toggle('hidden', savedTheme === 'dark');
+
+            initAuthState();
+            loadProviders();
+            loadSavedKeys();
+
+            // 价格表加载（每5分钟自动刷新，数据源缓存10分钟）
+            applyLang();
+            loadPricing();
+            setInterval(() => loadPricing(true), 300000);
+        });
+
+        // 访问码鉴权：启用时在头部显示退出登录按钮
+        async function initAuthState() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/check`);
+                const data = await response.json();
+                if (data.enabled) {
+                    document.getElementById('logout-btn').classList.remove('hidden');
+                }
+            } catch (error) { /* 鉴权状态获取失败不影响主功能 */ }
+        }
+
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+            } catch (error) { /* 即使请求失败也回到登录页 */ }
+            location.href = '/';
+        }
+
+        // Load Providers
+        async function loadProviders() {
+            try {
+                const response = await fetch(`${API_BASE}/providers`);
+                providers = await response.json();
+                
+                const grid = document.getElementById('provider-grid');
+                grid.innerHTML = providers.map(p => `
+                    <button onclick="selectProvider('${p.key}')" 
+                        class="provider-btn btn btn-sm btn-ghost border border-gray-600 justify-start font-normal"
+                        data-provider="${p.key}">
+                        <span class="w-2 h-2 rounded-full bg-primary mr-2"></span>
+                        ${pname(p.name)}
+                    </button>
+                `).join('');
+            } catch (error) {
+                showToast(t('无法加载服务商列表，请确保后端服务正在运行'), 'error');
+                console.error('Load providers error:', error);
+            }
+        }
+
+        // Select Provider
+        function selectProvider(key) {
+            currentProvider = providers.find(p => p.key === key);
+            if (!currentProvider) return;
+
+            // Update UI
+            document.querySelectorAll('.provider-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.provider === key) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Enable and update dashboard button
+            const dashboardBtn = document.getElementById('dashboard-btn');
+            dashboardBtn.disabled = !currentProvider.dashboard;
+            dashboardBtn.dataset.url = currentProvider.dashboard;
+
+            // Check if we have a saved key for this provider
+            checkSavedKey(key);
+
+            // 自定义服务商：custom为新增模式，custom_xxx为编辑模式
+            if (key === 'custom') {
+                _editingCustomId = '';
+                fillCustomForm({});
+                toggleCustomConfig(true, false);
+            } else if (key.startsWith('custom_')) {
+                _editingCustomId = key;
+                fillCustomForm(customConfigs[key] || {});
+                toggleCustomConfig(true, true);
+            } else {
+                toggleCustomConfig(false);
+            }
+        }
+
+        // Open dashboard in new tab
+        function openDashboard() {
+            const btn = document.getElementById('dashboard-btn');
+            const url = btn.dataset.url;
+            if (url) {
+                window.open(url, '_blank');
+            }
+        }
+
+        // Check for saved key
+        let savedKeysCache = [];
+        let _noteEditId = '';
+
+        async function checkSavedKey(providerKey) {
+            try {
+                const response = await fetch(`${API_BASE}/keys/${providerKey}`);
+                const data = await response.json();
+                document.getElementById('api-key').value = data.token || '';
+                const noteInput = document.getElementById('api-note');
+                if (noteInput) noteInput.value = data.note || '';
+            } catch (error) {
+                console.log('No saved token for this provider');
+            }
+        }
+
+        // Load saved tokens list（同一服务商可有多条）
+        async function loadSavedKeys() {
+            try {
+                const response = await fetch(`${API_BASE}/keys`);
+                const keys = await response.json();
+                savedKeysCache = keys;
+
+                const container = document.getElementById('saved-keys');
+                if (keys.length === 0) {
+                    container.innerHTML = `<p class="text-gray-500 text-sm">${t('暂无保存的Token')}</p>`;
+                    return;
+                }
+
+                container.innerHTML = keys.map(k => `
+                    <div class="saved-key-item flex items-center justify-between p-2 rounded-lg hover:bg-opacity-70">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                            <span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+                            <div class="min-w-0">
+                                <p class="text-sm truncate">${pname(k.provider_name)}${k.note ? ` <span class="opacity-50">· ${k.note}</span>` : ''}</p>
+                                <p class="text-xs opacity-50 truncate">${k.api_key.slice(0, 10)}...</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 flex-shrink-0">
+                            <button onclick="copyToken('${k.id}')" class="btn btn-xs btn-ghost">${t('复制')}</button>
+                            <button onclick="useToken('${k.id}')" class="btn btn-xs btn-ghost">${t('使用')}</button>
+                            <button onclick="editNote('${k.id}')" class="btn btn-xs btn-ghost">${t('备注')}</button>
+                            <button onclick="deleteToken('${k.id}')" class="btn btn-xs btn-ghost text-error hover:bg-error hover:text-white">${t('删除')}</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.log('Error loading saved tokens:', error);
+            }
+        }
+
+        // Toggle API key visibility
+        function toggleKeyVisibility() {
+            const input = document.getElementById('api-key');
+            const showIcon = document.getElementById('eye-icon-show');
+            const hideIcon = document.getElementById('eye-icon-hide');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                showIcon.classList.add('hidden');
+                hideIcon.classList.remove('hidden');
+            } else {
+                input.type = 'password';
+                showIcon.classList.remove('hidden');
+                hideIcon.classList.add('hidden');
+            }
+        }
+
+        // 复制工具：http环境（如NAS访问）下navigator.clipboard不可用，使用execCommand兜底
+        function copyTextToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                return navigator.clipboard.writeText(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            return Promise.resolve();
+        }
+
+        // Copy API key to clipboard
+        async function copyApiKey() {
+            const apiKey = document.getElementById('api-key').value.trim();
+
+            if (!apiKey) {
+                showToast(t('没有可复制的密钥'), 'warning');
+                return;
+            }
+
+            try {
+                await copyTextToClipboard(apiKey);
+                
+                // Show success icon
+                const copyIcon = document.getElementById('copy-icon');
+                const successIcon = document.getElementById('copy-success-icon');
+                
+                copyIcon.classList.add('hidden');
+                successIcon.classList.remove('hidden');
+                
+                showToast(t('已复制到剪贴板'), 'success');
+                
+                // Reset icon after 2 seconds
+                setTimeout(() => {
+                    copyIcon.classList.remove('hidden');
+                    successIcon.classList.add('hidden');
+                }, 2000);
+            } catch (error) {
+                showToast(t('复制失败'), 'error');
+                console.error('Copy error:', error);
+            }
+        }
+
+        // 使用一条已保存Token：切换服务商并回填
+        function useToken(id) {
+            const k = savedKeysCache.find(x => x.id === id);
+            if (!k) return;
+            selectProvider(k.provider_key);
+            document.getElementById('api-key').value = k.api_key;
+            const noteInput = document.getElementById('api-note');
+            if (noteInput) noteInput.value = k.note || '';
+        }
+
+        // 复制一条已保存Token
+        async function copyToken(id) {
+            const k = savedKeysCache.find(x => x.id === id);
+            if (!k) return;
+            try {
+                await copyTextToClipboard(k.api_key);
+                showToast(t('已复制到剪贴板'), 'success');
+            } catch (e) {
+                showToast(t('复制失败'), 'error');
+            }
+        }
+
+        // 编辑备注
+        function editNote(id) {
+            const k = savedKeysCache.find(x => x.id === id);
+            if (!k) return;
+            _noteEditId = id;
+            document.getElementById('note-edit').value = k.note || '';
+            document.getElementById('note-modal').showModal();
+            document.getElementById('note-save').onclick = async () => {
+                const note = document.getElementById('note-edit').value.trim();
+                try {
+                    const response = await fetch(`${API_BASE}/tokens/${_noteEditId}/note`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ note: note })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        showToast(t('备注已保存'), 'success');
+                        loadSavedKeys();
+                        document.getElementById('note-modal').close();
+                    } else {
+                        showToast(t(data.error || '保存失败'), 'error');
+                    }
+                } catch (e) {
+                    showToast(t('保存失败'), 'error');
+                }
+            };
+        }
+
+        // 删除一条已保存Token
+        async function deleteToken(id) {
+            if (!confirm(t('确定要删除这个Token吗？'))) {
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/tokens/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(t('Token已删除'), 'success');
+                    loadSavedKeys();
+                    // 若删除的是当前输入框里的Token，清空输入
+                    if (savedTokenId === id) {
+                        document.getElementById('api-key').value = '';
+                        const noteInput = document.getElementById('api-note');
+                        if (noteInput) noteInput.value = '';
+                        savedTokenId = '';
+                    }
+                } else {
+                    showToast(t(data.error || '删除失败'), 'error');
+                }
+            } catch (e) {
+                showToast(t('删除失败'), 'error');
+            }
+        }
+
+        // Query all saved keys' balances
+        async function queryAllBalances() {
+            try {
+                const response = await fetch(`${API_BASE}/keys`);
+                const savedKeys = await response.json();
+                
+                if (savedKeys.length === 0) {
+                    showToast(t('没有已保存的Token'), 'warning');
+                    return;
+                }
+
+                showLoading(`${t('正在查询')} ${savedKeys.length} ${t('个密钥的余额...')}`);
+
+                const results = [];
+                let dominantCurrency = 'CNY';
+
+                for (const keyInfo of savedKeys) {
+                    try {
+                        const balanceResponse = await fetch(`${API_BASE}/balance`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider: keyInfo.provider_key,
+                                api_key: keyInfo.api_key
+                            })
+                        });
+
+                        const balanceData = await balanceResponse.json();
+                        
+                        if (balanceData.success && balanceData.data && balanceData.data.length > 0) {
+                            results.push({
+                                provider_name: keyInfo.provider_name,
+                                provider_key: keyInfo.provider_key,
+                                note: keyInfo.note || '',
+                                data: balanceData.data[0],
+                                currency: balanceData.currency,
+                                error: null
+                            });
+                            dominantCurrency = balanceData.currency;
+                        } else {
+                            results.push({
+                                provider_name: keyInfo.provider_name,
+                                provider_key: keyInfo.provider_key,
+                                note: keyInfo.note || '',
+                                data: null,
+                                currency: 'CNY',
+                                error: t(balanceData.error || '查询失败')
+                            });
+                        }
+                    } catch (e) {
+                        results.push({
+                            provider_name: keyInfo.provider_name,
+                            provider_key: keyInfo.provider_key,
+                            note: keyInfo.note || '',
+                            data: null,
+                            currency: 'CNY',
+                            error: t('网络错误')
+                        });
+                    }
+                }
+
+                hideLoading();
+                displayAllBalances(results, dominantCurrency);
+                showToast(t('全部查询完成'), 'success');
+
+            } catch (error) {
+                hideLoading();
+                showToast(t('获取已保存密钥列表失败'), 'error');
+                console.error('Query all balances error:', error);
+            }
+        }
+
+        // Display all balances
+        function displayAllBalances(results, currency) {
+            const allBalancesCard = document.getElementById('all-balances-card');
+            const content = document.getElementById('all-balances-content');
+            
+            allBalancesCard.classList.remove('hidden');
+            document.getElementById('total-balance-currency').textContent = currency;
+
+            const validResults = results.filter(r => r.data);
+            const invalidResults = results.filter(r => r.error);
+
+            let totalAvailable = 0;
+            let totalToppedUp = 0;
+
+            validResults.forEach(r => {
+                totalAvailable += r.data.available || 0;
+                totalToppedUp += r.data.topped_up || 0;
+            });
+
+            content.innerHTML = `
+                <div class="mb-6 p-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30">
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="opacity-60 text-sm">${t('总可用余额')}</p>
+                            <p class="stat-value text-xl">${formatNumber(totalAvailable)}</p>
+                        </div>
+                        <div>
+                            <p class="opacity-60 text-sm">${t('服务商数量')}</p>
+                            <p class="text-2xl font-bold">${validResults.length}</p>
+                        </div>
+                        <div>
+                            <p class="opacity-60 text-sm">${t('充值余额')}</p>
+                            <p class="text-xl font-semibold text-secondary">${formatNumber(totalToppedUp)}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-2 max-h-80 overflow-y-auto scrollbar-thin">
+                    ${results.map(r => `
+                        <div class="saved-key-item flex items-center justify-between p-3 rounded-lg ${r.error ? 'opacity-50' : ''}">
+                            <div class="flex items-center gap-3">
+                                <span class="w-3 h-3 rounded-full ${r.error ? 'bg-error' : 'bg-primary'}"></span>
+                                <span class="font-medium">${pname(r.provider_name)}${r.note ? ` <span class="opacity-50 text-xs">(${r.note})</span>` : ''}</span>
+                            </div>
+                            <div class="text-right">
+                                ${r.error ? 
+                                    `<span class="text-error text-sm">${r.error}</span>` :
+                                    `<span class="text-success font-semibold">${formatNumber(r.data.available)}</span>
+                                     <span class="opacity-60 text-sm ml-1">${r.currency}</span>`
+                                }
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Query Balance
+        async function queryBalance() {
+            if (!currentProvider) {
+                showToast(t('请先选择一个服务商'), 'warning');
+                return;
+            }
+            
+            const apiKey = document.getElementById('api-key').value.trim();
+            if (!apiKey) {
+                showToast(t('请输入 API Key'), 'warning');
+                return;
+            }
+
+            showLoading(t('正在查询余额...'));
+
+            try {
+                const response = await fetch(`${API_BASE}/balance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: currentProvider.key,
+                        api_key: apiKey
+                    })
+                });
+
+                const data = await response.json();
+                hideLoading();
+
+                if (data.success) {
+                    displayBalance(data.data, data.currency);
+                    showToast(t('查询成功'), 'success');
+                    // Auto query usage after balance
+                    queryUsage();
+                } else {
+                    showToast(data.error || '查询失败', 'error');
+                    displayBalanceError(data.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showToast(t('网络错误，请确保后端服务正在运行'), 'error');
+                console.error('Query balance error:', error);
+            }
+        }
+
+        // Query Usage
+        async function queryUsage() {
+            if (!currentProvider) {
+                showToast(t('请先选择一个服务商并查询余额'), 'warning');
+                return;
+            }
+            
+            const apiKey = document.getElementById('api-key').value.trim();
+            if (!apiKey) {
+                showToast(t('请先输入 API Key'), 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/usage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: currentProvider.key,
+                        api_key: apiKey
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayUsage(data.data, data.currency);
+                } else {
+                    displayUsageError(data.error);
+                }
+            } catch (error) {
+                displayUsageError('网络错误');
+                console.error('Query usage error:', error);
+            }
+        }
+
+        // Save API Key
+        async function saveApiKey() {
+            if (!currentProvider) {
+                showToast(t('请先选择一个服务商'), 'warning');
+                return;
+            }
+            
+            const apiKey = document.getElementById('api-key').value.trim();
+            if (!apiKey) {
+                showToast(t('请输入 API Key'), 'warning');
+                return;
+            }
+
+            try {
+                const noteValue = document.getElementById('api-note').value.trim();
+                const response = await fetch(`${API_BASE}/keys/${currentProvider.key}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, note: noteValue })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast(t(data.message || 'Token已保存'), 'success');
+                    savedTokenId = data.id || '';
+                    loadSavedKeys();
+                } else {
+                    showToast(t(data.error || '保存失败'), 'error');
+                }
+            } catch (error) {
+                showToast(t('保存失败'), 'error');
+                console.error('Save key error:', error);
+            }
+        }
+
+        // ===== 自定义服务商（支持多个，可新增/修改/删除） =====
+        let customConfigs = {};
+        let _editingCustomId = '';
+
+        function toggleCustomConfig(show, isEdit = false) {
+            document.getElementById('custom-config').classList.toggle('hidden', !show);
+            document.getElementById('custom-delete-btn').classList.toggle('hidden', !(show && isEdit));
+        }
+
+        function fillCustomForm(cfg) {
+            document.getElementById('custom-name').value = cfg.name || '';
+            document.getElementById('custom-base-url').value = cfg.base_url || '';
+            document.getElementById('custom-balance-path').value = cfg.balance_path || '';
+            document.getElementById('custom-usage-path').value = cfg.usage_path || '';
+            document.getElementById('custom-currency').value = cfg.currency || '';
+        }
+
+        async function loadCustomConfigs() {
+            try {
+                const response = await fetch(`${API_BASE}/custom-providers`);
+                const data = await response.json();
+                customConfigs = data.providers || {};
+            } catch (error) { /* 忽略 */ }
+        }
+
+        async function saveCustomConfig() {
+            const cfg = {
+                name: document.getElementById('custom-name').value.trim(),
+                base_url: document.getElementById('custom-base-url').value.trim(),
+                balance_path: document.getElementById('custom-balance-path').value.trim(),
+                usage_path: document.getElementById('custom-usage-path').value.trim(),
+                currency: document.getElementById('custom-currency').value.trim()
+            };
+            if (!cfg.base_url) {
+                showToast(t('请填写 API 地址'), 'error');
+                return;
+            }
+            if (_editingCustomId) cfg.id = _editingCustomId;
+            try {
+                const response = await fetch(`${API_BASE}/custom-config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cfg)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(t('自定义服务商配置已保存'), 'success');
+                    await loadCustomConfigs();
+                    await loadProviders();
+                    selectProvider(data.id);
+                } else {
+                    showToast(t(data.error || '保存失败'), 'error');
+                }
+            } catch (error) {
+                showToast(t('保存失败：网络错误'), 'error');
+            }
+        }
+
+        async function deleteCustomProvider() {
+            if (!_editingCustomId) return;
+            if (!confirm(t('确认删除该自定义服务商？其已保存的密钥也会一并删除。'))) return;
+            try {
+                const response = await fetch(`${API_BASE}/custom-config/${_editingCustomId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(t('删除成功'), 'success');
+                    await loadCustomConfigs();
+                    await loadProviders();
+                    selectProvider('custom');
+                } else {
+                    showToast(t(data.error || '删除失败'), 'error');
+                }
+            } catch (error) {
+                showToast(t('删除失败'), 'error');
+            }
+        }
+
+        // ===== 实时价格（数据源：traktoken.com，按性价比降序，含峰谷状态） =====
+        let _pricingLoading = false;
+        function renderPricing(data) {
+            const container = document.getElementById('pricing-content');
+            if (!data.success) {
+                container.innerHTML = `<div class="text-center py-8">
+                    <p class="text-error text-sm">${t(data.error || '获取价格数据失败')}</p>
+                    <button onclick="loadPricing(true)" class="btn btn-sm btn-ghost mt-2">${t('重试')}</button>
+                </div>`;
+                return;
+            }
+            const rows = [...data.rows].sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0));
+            let html = `
+                <p class="text-xs opacity-60 mb-3">${t('数据来源')} <a href="https://www.traktoken.com/" target="_blank" class="link link-primary">traktoken.com</a> · ${t('评估时间')} ${data.now}（${t('北京时间')}）</p>
+                <div class="overflow-x-auto scrollbar-thin min-w-0">
+                    <table class="table table-sm w-full">
+                        <thead><tr>
+                            <th>${t('模型')}</th>
+                            <th class="text-right">${t('输入价')}</th>
+                            <th class="text-right">${t('输出价')}</th>
+                            <th class="text-right">${t('性价比')}</th>
+                            <th class="text-center">${t('峰谷')}</th>
+                        </tr></thead>
+                        <tbody>`;
+            rows.forEach(r => {
+                let peak = '<span class="opacity-40">—</span>';
+                if (r.peak === '谷') peak = `<span class="badge badge-success badge-sm" title="${r.peak_desc || ''}">${t('谷')}</span>`;
+                else if (r.peak === '峰') peak = `<span class="badge badge-warning badge-sm" title="${r.peak_desc || ''}">${t('峰')}</span>`;
+                html += `<tr class="hover">
+                    <td><p class="font-medium text-sm leading-tight">${r.model}</p><p class="text-xs opacity-50">${pname(r.vendor)}</p></td>
+                    <td class="text-right font-mono text-sm">$${r.input}</td>
+                    <td class="text-right font-mono text-sm text-orange-500">$${r.output}</td>
+                    <td class="text-right font-mono text-sm">${r.score}</td>
+                    <td class="text-center">${peak}</td>
+                </tr>`;
+            });
+            html += `</tbody></table></div>
+                <p class="text-xs opacity-40 mt-3">${t('价格为美元/百万tokens，按性价比降序排列；峰谷状态按北京时间判断')}</p>`;
+            container.innerHTML = html;
+        }
+
+        async function loadPricing(force) {
+            const container = document.getElementById('pricing-content');
+            if (!container) return;
+            if (_pricingLoading) return;
+            if (force) {
+                container.innerHTML = `<div class="text-center py-8 opacity-60"><span class="loading loading-spinner loading-sm"></span> ${t('加载中...')}</div>`;
+            }
+            _pricingLoading = true;
+            try {
+                const response = await fetch(`${API_BASE}/pricing`);
+                const data = await response.json();
+                renderPricing(data);
+            } catch (error) {
+                container.innerHTML = `<p class="text-center py-8 text-error text-sm">${t('价格信息加载失败')}</p>`;
+            }
+            _pricingLoading = false;
+        }
+        // Display Balance
+        function displayBalance(balanceData, currency) {
+            const container = document.getElementById('balance-content');
+            document.getElementById('balance-provider').textContent = pname(currentProvider.name);
+
+            if (Array.isArray(balanceData) && balanceData.length > 0) {
+                const item = balanceData[0];
+                container.innerHTML = `
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div class="stat-card p-6 rounded-xl card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('可用余额')}</p>
+                            <p class="stat-value">${formatNumber(item.available)}</p>
+                            <p class="text-sm opacity-60">${currency}</p>
+                        </div>
+                        <div class="stat-card p-6 rounded-xl card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('总余额')}</p>
+                            <p class="text-2xl font-bold">${formatNumber(item.total)}</p>
+                            <p class="text-sm opacity-60">${currency}</p>
+                        </div>
+                        <div class="stat-card p-6 rounded-xl card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('赠送额度')}</p>
+                            <p class="text-xl font-semibold text-success">${formatNumber(item.granted)}</p>
+                            <p class="text-sm opacity-60">${currency}</p>
+                        </div>
+                        <div class="stat-card p-6 rounded-xl card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('充值余额')}</p>
+                            <p class="text-xl font-semibold text-secondary">${formatNumber(item.topped_up)}</p>
+                            <p class="text-sm opacity-60">${currency}</p>
+                        </div>
+                    </div>
+                    ${item.note ? `<p class="text-xs opacity-60 mt-4 text-center">${item.note}</p>` : ''}
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center py-8">
+                        <p class="opacity-60">${t('余额信息不可用')}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Display Balance Error
+        function displayBalanceError(error) {
+            const container = document.getElementById('balance-content');
+            container.innerHTML = `
+                <div class="text-center py-8">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-error bg-opacity-20 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <p class="text-error font-medium">${error}</p>
+                    <p class="opacity-60 text-sm mt-2">${t('请检查 API Key 是否正确')}</p>
+                </div>
+            `;
+        }
+
+        // Display Usage
+        function displayUsage(usageData, currency) {
+            const container = document.getElementById('usage-content');
+            
+            if (usageData) {
+                container.innerHTML = `
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <div class="stat-card p-4 rounded-xl text-center card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('今日用量')}</p>
+                            <p class="text-xl font-bold text-warning">${formatNumber(usageData.used_today)}</p>
+                            <p class="text-xs opacity-60">${currency}</p>
+                        </div>
+                        <div class="stat-card p-4 rounded-xl text-center card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('本月用量')}</p>
+                            <p class="text-xl font-bold text-error">${formatNumber(usageData.used_month)}</p>
+                            <p class="text-xs opacity-60">${currency}</p>
+                        </div>
+                        <div class="stat-card p-4 rounded-xl text-center card-hover transition-all">
+                            <p class="opacity-60 text-sm mb-2">${t('累计使用')}</p>
+                            <p class="text-xl font-bold">${formatNumber(usageData.total_used)}</p>
+                            <p class="text-xs opacity-60">${currency}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center py-8">
+                        <p class="opacity-60">${t('该服务商暂无用量数据')}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Display Usage Error
+        function displayUsageError(error) {
+            const container = document.getElementById('usage-content');
+            container.innerHTML = `
+                <div class="text-center py-8">
+                    <p class="opacity-60">${t(error || '无法获取用量数据')}</p>
+                </div>
+            `;
+        }
+
+        // Format number
+        function formatNumber(num) {
+            if (num === undefined || num === null) return '0.0000';
+            return Number(num).toFixed(4);
+        }
+
+        // Show Loading
+        function showLoading(text = t('加载中...')) {
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading-modal').showModal();
+        }
+
+        // Hide Loading
+        function hideLoading() {
+            document.getElementById('loading-modal').close();
+        }
+
+        // Show Toast
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const colors = {
+                success: 'alert-success',
+                error: 'alert-error',
+                warning: 'alert-warning',
+                info: 'alert-info'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `alert ${colors[type]} toast`;
+            toast.innerHTML = `<span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

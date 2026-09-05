@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Manager - 访问验证</title>
+    <script src="vendor/tailwind.js"></script>
+    <link href="vendor/daisyui.full.min.css" rel="stylesheet" type="text/css" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#a855f7',
+                        secondary: '#6366f1',
+                        accent: '#f472b6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Dark Theme (Default) */
+        [data-theme="dark"] {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #252542;
+            --bg-card: #1a1a2e;
+            --glass-bg: rgba(26, 26, 46, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #e5e7eb;
+            --text-muted: #9ca3af;
+            --gradient-start: #a855f7;
+            --gradient-end: #6366f1;
+            --hover-shadow: rgba(168, 85, 247, 0.15);
+            --card-border: #374151;
+        }
+
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #f1f5f9;
+            --bg-tertiary: #e2e8f0;
+            --bg-card: #ffffff;
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(0, 0, 0, 0.1);
+            --text-primary: #0f172a;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --gradient-start: #a855f7;
+            --gradient-end: #6366f1;
+            --hover-shadow: rgba(168, 85, 247, 0.2);
+            --card-border: #e2e8f0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-effect {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .gradient-border {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            padding: 2px;
+            border-radius: 1rem;
+        }
+
+        .inner-card {
+            background: var(--bg-card);
+            border-radius: calc(1rem - 2px);
+            border: 1px solid var(--card-border);
+        }
+
+        .input-bordered {
+            background-color: var(--bg-tertiary) !important;
+            border-color: var(--card-border) !important;
+            color: var(--text-primary) !important;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .input-bordered:focus {
+            border-color: var(--gradient-start) !important;
+        }
+
+        .input::placeholder {
+            color: var(--text-muted) !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-6">
+    <!-- 语言/主题切换 -->
+    <div class="fixed top-4 right-4 z-10 flex gap-2">
+    <button id="lang-btn" onclick="toggleLang()" class="btn btn-ghost btn-sm font-semibold">EN</button>
+    <button onclick="toggleTheme()" class="btn btn-ghost btn-circle">
+        <svg id="theme-icon-dark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+        <svg id="theme-icon-light" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+    </button>
+    </div>
+
+    <!-- 登录卡片 -->
+    <div class="w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Token Manager</h1>
+            <p class="mt-2 text-sm opacity-60">AI API 余额查询工具 · 请输入访问码继续</p>
+        </div>
+
+        <div class="gradient-border">
+            <div class="inner-card p-8">
+                <form onsubmit="return doLogin(event)">
+                    <label class="label pb-1">
+                        <span class="text-sm opacity-70">访问码</span>
+                    </label>
+                    <input id="access-code" type="password" class="input input-bordered input-bordered w-full" placeholder="请输入访问码" autocomplete="current-password" autofocus />
+                    <div id="login-error" class="hidden mt-3 text-sm text-error flex items-center gap-2">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span id="login-error-text">访问码错误，请重试</span>
+                    </div>
+                    <button id="login-btn" type="submit" class="btn btn-primary w-full mt-6">
+                        进入
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <p class="text-center text-xs opacity-40 mt-6">访问码由部署者在 docker-compose.yml 中设置 · v1.3</p>
+    </div>
+
+    <script>
+
+        // ===== 中英文双语（默认中文） =====
+        let lang = localStorage.getItem('lang') || 'zh';
+        const I18N_EN = {"AI API 余额查询工具 · 请输入访问码继续": "AI API Balance Query · Enter access code to continue", "访问码": "Access Code", "进入": "Sign In", "请输入访问码": "Enter access code", "请输入访问码 ": "Enter access code", "访问码错误，请重试": "Invalid access code, please try again", "网络错误，请稍后重试": "Network error, please try again later", "访问码由部署者在 docker-compose.yml 中设置": "The access code is configured by the deployer in docker-compose.yml", "Token Manager - 访问验证": "Token Manager - Access Verification"};
+        function t(s) { return lang === 'en' ? (I18N_EN[s] || s) : s; }
+        let _i18nNodes = null;
+        function _collectI18n() {
+            _i18nNodes = [];
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: n => n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            });
+            while (walker.nextNode()) {
+                const node = walker.currentNode;
+                const tag = node.parentElement && node.parentElement.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE') continue;
+                const s = node.textContent.trim();
+                if (I18N_EN[s]) _i18nNodes.push({ node: node, zh: node.textContent, key: s });
+                const ph = node.parentElement && node.parentElement.tagName === 'INPUT' ? node.parentElement.getAttribute('placeholder') : null;
+                if (ph && I18N_EN[ph]) _i18nNodes.push({ ph: node.parentElement, zh: ph });
+            }
+        }
+        function applyLang() {
+            if (!_i18nNodes) _collectI18n();
+            _i18nNodes.forEach(item => {
+                if (item.ph) { item.ph.setAttribute('placeholder', t(item.zh)); }
+                else { item.node.textContent = item.zh.replace(item.key, t(item.key)); }
+            });
+            document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+            const btn = document.getElementById('lang-btn');
+            if (btn) btn.textContent = lang === 'en' ? '中文' : 'EN';
+        }
+        function toggleLang() {
+            lang = lang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('lang', lang);
+            applyLang();
+        }
+
+        // Theme Toggle（与主界面一致，共用同一个 localStorage 主题配置）
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.getAttribute('data-theme') === 'dark';
+            html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', !isDark);
+            document.getElementById('theme-icon-light').classList.toggle('hidden', isDark);
+
+            localStorage.setItem('theme', isDark ? 'light' : 'dark');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyLang();
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', savedTheme !== 'dark');
+            document.getElementById('theme-icon-light').classList.toggle('hidden', savedTheme === 'dark');
+        });
+
+        async function doLogin(event) {
+            event.preventDefault();
+            const code = document.getElementById('access-code').value.trim();
+            const btn = document.getElementById('login-btn');
+            const errBox = document.getElementById('login-error');
+
+            if (!code) {
+                document.getElementById('login-error-text').textContent = t('请输入访问码');
+                errBox.classList.remove('hidden');
+                return false;
+            }
+
+            btn.disabled = true;
+            btn.classList.add('loading');
+            errBox.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    location.href = '/';
+                    return false;
+                }
+                document.getElementById('login-error-text').textContent = t(data.error || '访问码错误，请重试');
+                errBox.classList.remove('hidden');
+            } catch (e) {
+                document.getElementById('login-error-text').textContent = t('网络错误，请稍后重试');
+                errBox.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            return false;
+        }
+    </script>
+</body>
+</html>
