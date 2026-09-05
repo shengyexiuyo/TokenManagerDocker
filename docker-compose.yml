@@ -1,8 +1,7 @@
 services:
   token-manager:
     # 直接拉取发布在 GitHub Container Registry 的预构建镜像，无需克隆源码、无需本地构建
-    # ↓↓↓ 使用前把 <你的GitHub用户名> 替换成你的 GitHub 用户名 ↓↓↓
-    image: ghcr.io/<你的GitHub用户名>/tokenmanagerdocker:latest
+    image: ghcr.io/shengyexiuyo/tokenmanagerdocker:latest
     # 想自己从源码构建（改代码、或上面的镜像拉不动时）：注释掉上面的 image 行，取消下面两行注释
     # build:
     #   context: .

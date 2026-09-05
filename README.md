@@ -30,12 +30,12 @@ TokenManagerDocker/
 
 ## 🚀 方式一：单文件 compose 部署（推荐，无需克隆源码）
 
-只需要一个 `docker-compose.yml` 文件。在 NAS 上新建一个目录（如 `/volume1/docker/token-manager`），在里面创建 `docker-compose.yml`，粘贴以下内容（**把 `<你的GitHub用户名>` 换成实际用户名**）：
+只需要一个 `docker-compose.yml` 文件。在 NAS 上新建一个目录（如 `/volume1/docker/token-manager`），在里面创建 `docker-compose.yml`，粘贴以下内容：
 
 ```yaml
 services:
   token-manager:
-    image: ghcr.io/<你的GitHub用户名>/tokenmanagerdocker:latest
+    image: ghcr.io/shengyexiuyo/tokenmanagerdocker:latest
     container_name: token-manager
     restart: unless-stopped
     ports:
@@ -68,7 +68,7 @@ docker compose up -d
 **国内拉取镜像卡住/失败**：Docker 的加速源配置（registry-mirrors）只对 Docker Hub 生效，对 ghcr.io 无效。把 compose 里的 `image` 换成加速站的 ghcr 代理地址即可，例如（以 DaoCloud 为例，其他加速站同理把 `ghcr.io` 换成其代理域名）：
 
 ```yaml
-image: ghcr.m.daocloud.io/<你的GitHub用户名>/tokenmanagerdocker:latest
+image: ghcr.m.daocloud.io/shengyexiuyo/tokenmanagerdocker:latest
 ```
 
 ## 🚀 方式二：克隆仓库部署
@@ -76,9 +76,8 @@ image: ghcr.m.daocloud.io/<你的GitHub用户名>/tokenmanagerdocker:latest
 想保留源码或方便查看代码的话，克隆整个仓库，一样直接拉预构建镜像：
 
 ```bash
-git clone https://github.com/<你的GitHub用户名>/TokenManagerDocker.git
+git clone https://github.com/shengyexiuyo/TokenManagerDocker.git
 cd TokenManagerDocker
-# 先把 docker-compose.yml 里的 <你的GitHub用户名> 替换成实际用户名
 docker compose up -d
 ```
 
@@ -136,7 +135,7 @@ docker compose pull && docker compose up -d # 更新到最新版镜像
 
 镜像通过 GitHub Actions 自动构建发布（`.github/workflows/docker-publish.yml`），无需手动操作：
 
-- **自动构建**：推送代码到默认分支（main/master）→ 自动构建 amd64/arm64 双架构镜像并发布为 `ghcr.io/<用户名>/tokenmanagerdocker:latest`
+- **自动构建**：推送代码到默认分支（main/master）→ 自动构建 amd64/arm64 双架构镜像并发布为 `ghcr.io/shengyexiuyo/tokenmanagerdocker:latest`
 - **版本发布**：打标签 `git tag v1.0.0 && git push --tags` → 额外生成 `v1.0.0` 版本 tag 的镜像
 - **⚠️ 首次发布后必做**：GitHub 仓库页 → 右侧 **Packages** → 点进 `tokenmanagerdocker` → **Package settings** → **Danger Zone → Change visibility → Public**。GHCR 包默认是 Private，不改为 Public 别人拉取会报 `denied`
 - CI 构建使用官方基础镜像 `python:3.11-slim`（通过 build-args 覆盖），本地 NAS 构建才走 Dockerfile 里默认的国内加速站
