@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# 运行时密钥数据（挂载卷，绝不入库）
+data/*
+!data/.gitkeep
+
+# 导出的镜像文件
+*.tar
+
+# 环境变量文件
+.env

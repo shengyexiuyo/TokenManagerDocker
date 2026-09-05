@@ -1,14 +1,16 @@
 services:
   token-manager:
-    build: .
-    image: token-manager:latest
-    # 只构建不拉取：避免部分NAS面板先去Docker Hub拉取token-manager镜像导致卡Pulling
-    pull_policy: build
+    # 直接拉取发布在 GitHub Container Registry 的预构建镜像，无需克隆源码、无需本地构建
+    # ↓↓↓ 使用前把 <你的GitHub用户名> 替换成你的 GitHub 用户名 ↓↓↓
+    image: ghcr.io/<你的GitHub用户名>/tokenmanagerdocker:latest
+    # 想自己从源码构建（改代码、或上面的镜像拉不动时）：注释掉上面的 image 行，取消下面两行注释
+    # build:
+    #   context: .
     container_name: token-manager
     restart: unless-stopped
     ports:
       # 左边是外部访问端口，右边是容器内端口(勿改)
-      # 群晖DSM默认占用5000端口，故外部默认使用8080，浏览器访问 http://NAS_IP:8080
+      # 群晖DSM默认占用5000端口，故外部默认使用8888，浏览器访问 http://NAS_IP:8888
       - "8888:5000"
     environment:
       - DATA_DIR=/data
