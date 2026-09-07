@@ -27,8 +27,8 @@ VOLUME ["/data"]
 
 EXPOSE 5000
 
-# 健康检查
+# 健康检查（/api/health为免鉴权探活端点，开启访问码/多用户后依然可用）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/api/providers', timeout=4).status==200 else 1)"
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=4).status==200 else 1)"
 
 CMD ["python", "server.py"]

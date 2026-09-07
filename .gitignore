@@ -11,3 +11,6 @@ data/*
 
 # 环境变量文件
 .env
+
+# ZCode 本地会话数据
+.zcode/

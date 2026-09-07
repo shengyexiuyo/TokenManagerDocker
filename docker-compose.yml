@@ -1,10 +1,10 @@
 services:
   token-manager:
     # 直接拉取发布在 GitHub Container Registry 的预构建镜像，无需克隆源码、无需本地构建
-    image: ghcr.io/shengyexiuyo/tokenmanagerdocker:latest
+    #image: ghcr.io/shengyexiuyo/tokenmanagerdocker:latest
     # 想自己从源码构建（改代码、或上面的镜像拉不动时）：注释掉上面的 image 行，取消下面两行注释
-    # build:
-    #   context: .
+    build: .
+    #context: .
     container_name: token-manager
     restart: unless-stopped
     ports:
@@ -14,11 +14,14 @@ services:
     environment:
       - DATA_DIR=/data
       - TZ=Asia/Shanghai
-      # 访问码：设置后打开界面和所有API都要求先输入；留空则不启用鉴权
+      # 多用户模式：取消注释启用注册/登录，每个账号独立保存Token，首个注册的账号自动成为管理员
+      # 启用后 ACCESS_CODE 变为注册邀请码：设置了则注册必须输入（防陌生人注册），留空则开放注册
+      - MULTI_USER=true
+      # 访问码：多用户模式下作为注册邀请码使用；普通模式下打开界面和所有API都要求先输入
       # 例如改成: - ACCESS_CODE=你的访问码   （修改后执行 docker compose up -d 生效）
-      - ACCESS_CODE=
+      - ACCESS_CODE= xb123456
       # 登录有效期（天）：有效期内打开页面免输访问码；0=关闭浏览器后即需重新登录
-      - SESSION_DAYS=30
+      - SESSION_DAYS=0
     volumes:
       # 密钥等配置持久化到当前目录的data文件夹，容器更新重建后不丢失
       - ./data:/data

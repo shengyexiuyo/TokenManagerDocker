@@ -11,7 +11,9 @@ import json
 import os
 import re
 import secrets
+import shutil
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
@@ -478,9 +480,16 @@ class MetaProvider(APIProvider):
 CUSTOM_CONFIG_FILE = '.custom_providers.json'
 LEGACY_CUSTOM_FILE = '.custom_provider.json'
 
+# 多用户数据读写锁：保护"读取-修改-写回"的JSON文件操作，避免并发更新互相覆盖
+_STORAGE_LOCK = threading.RLock()
 
-def _get_config_dir() -> str:
-    """配置文件目录：Docker中为DATA_DIR，打包exe为exe所在目录，开发时为代码目录"""
+# 用户名规则：2-32位字母/数字/下划线/连字符（同时用于防止路径穿越）
+_USERNAME_RE = re.compile(r'^[A-Za-z0-9_-]{2,32}$')
+USERS_DIR_NAME = 'users'
+
+
+def _base_config_dir() -> str:
+    """基础配置目录：Docker中为DATA_DIR，打包exe为exe所在目录，开发时为代码目录"""
     if os.environ.get('DATA_DIR'):
         return os.environ['DATA_DIR']
     if getattr(sys, 'frozen', False):
@@ -488,9 +497,55 @@ def _get_config_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def get_custom_configs() -> dict:
+def _get_config_dir(user: Optional[str] = None) -> str:
+    """配置文件目录；传入user时解析为该用户的独立数据目录（多用户模式）"""
+    if user:
+        if not _USERNAME_RE.match(user):
+            raise ValueError('非法用户名')
+        return os.path.join(_base_config_dir(), USERS_DIR_NAME, user)
+    return _base_config_dir()
+
+
+def migrate_legacy_user_data(username: str) -> list:
+    """多用户模式首个账号注册时，把单用户时代的全局数据文件整体移入该用户目录"""
+    src_dir = _base_config_dir()
+    dst_dir = _get_config_dir(username)
+    os.makedirs(dst_dir, exist_ok=True)
+    names = [TOKENS_FILE, CUSTOM_CONFIG_FILE, LEGACY_CUSTOM_FILE]
+    try:
+        for name in os.listdir(src_dir):
+            # 旧版单Token文件 .XX_key
+            if name.startswith('.') and name.endswith('_key'):
+                names.append(name)
+    except Exception:
+        pass
+    moved = []
+    for name in names:
+        src = os.path.join(src_dir, name)
+        if os.path.isfile(src):
+            try:
+                os.replace(src, os.path.join(dst_dir, name))
+                moved.append(name)
+            except Exception:
+                pass
+    return moved
+
+
+def delete_user_data(username: str) -> bool:
+    """删除某用户的全部数据目录（管理员删除用户时调用）"""
+    if not _USERNAME_RE.match(username or ''):
+        return False
+    path = os.path.join(_base_config_dir(), USERS_DIR_NAME, username)
+    if not os.path.isdir(path):
+        return False
+    shutil.rmtree(path, ignore_errors=True)
+    return True
+
+
+def get_custom_configs(user: Optional[str] = None) -> dict:
     """全部自定义服务商配置 {id: cfg}；首次读取时自动迁移旧版单配置文件"""
-    path = os.path.join(_get_config_dir(), CUSTOM_CONFIG_FILE)
+    config_dir = _get_config_dir(user)
+    path = os.path.join(config_dir, CUSTOM_CONFIG_FILE)
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -498,45 +553,47 @@ def get_custom_configs() -> dict:
             return data
     except Exception:
         pass
-    legacy_path = os.path.join(_get_config_dir(), LEGACY_CUSTOM_FILE)
+    legacy_path = os.path.join(config_dir, LEGACY_CUSTOM_FILE)
     try:
         with open(legacy_path, 'r', encoding='utf-8') as f:
             legacy = json.load(f)
         if isinstance(legacy, dict) and legacy.get('base_url'):
             legacy.pop('updated_at', None)
             cfgs = {'custom_migrated': legacy}
-            _write_custom_configs(cfgs)
+            _write_custom_configs(cfgs, user)
             return cfgs
     except Exception:
         pass
     return {}
 
 
-def _write_custom_configs(cfgs: dict):
-    config_dir = _get_config_dir()
+def _write_custom_configs(cfgs: dict, user: Optional[str] = None):
+    config_dir = _get_config_dir(user)
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, CUSTOM_CONFIG_FILE), 'w', encoding='utf-8') as f:
         json.dump(cfgs, f, ensure_ascii=False, indent=2)
 
 
-def save_custom_config(cfg: dict, cid: str = '') -> tuple:
+def save_custom_config(cfg: dict, cid: str = '', user: Optional[str] = None) -> tuple:
     """新增或更新自定义服务商，返回(域名内的id, 保存后的配置)"""
-    cfgs = get_custom_configs()
-    cid = cid if cid and cid in cfgs else 'custom_' + secrets.token_hex(3)
-    saved = {k: str(v).strip() for k, v in (cfg or {}).items()}
-    saved['updated_at'] = datetime.now().isoformat()
-    cfgs[cid] = saved
-    _write_custom_configs(cfgs)
-    return cid, saved
+    with _STORAGE_LOCK:
+        cfgs = get_custom_configs(user)
+        cid = cid if cid and cid in cfgs else 'custom_' + secrets.token_hex(3)
+        saved = {k: str(v).strip() for k, v in (cfg or {}).items()}
+        saved['updated_at'] = datetime.now().isoformat()
+        cfgs[cid] = saved
+        _write_custom_configs(cfgs, user)
+        return cid, saved
 
 
-def delete_custom_config(cid: str) -> bool:
-    cfgs = get_custom_configs()
-    if cid in cfgs:
-        del cfgs[cid]
-        _write_custom_configs(cfgs)
-        return True
-    return False
+def delete_custom_config(cid: str, user: Optional[str] = None) -> bool:
+    with _STORAGE_LOCK:
+        cfgs = get_custom_configs(user)
+        if cid in cfgs:
+            del cfgs[cid]
+            _write_custom_configs(cfgs, user)
+            return True
+        return False
 
 
 class CustomProvider(APIProvider):
@@ -588,9 +645,9 @@ class CustomProvider(APIProvider):
         return len(api_key) > 8
 
 
-def get_config_dir() -> str:
-    """配置目录（密钥文件所在目录），供桌面版等直接调用"""
-    return _get_config_dir()
+def get_config_dir(user: Optional[str] = None) -> str:
+    """配置目录（密钥文件所在目录），供桌面版等直接调用；传user为该用户独立目录"""
+    return _get_config_dir(user)
 
 
 # ==================== 多Token存储（每个服务商可保存多个Token） ====================
@@ -598,18 +655,19 @@ def get_config_dir() -> str:
 TOKENS_FILE = '.tokens.json'
 
 
-def _write_tokens(tokens: list):
-    config_dir = _get_config_dir()
+def _write_tokens(tokens: list, user: Optional[str] = None):
+    config_dir = _get_config_dir(user)
     os.makedirs(config_dir, exist_ok=True)
     with open(os.path.join(config_dir, TOKENS_FILE), 'w', encoding='utf-8') as f:
         json.dump(tokens, f, ensure_ascii=False, indent=2)
 
 
-def _migrate_legacy_keys(tokens: list) -> list:
+def _migrate_legacy_keys(tokens: list, user: Optional[str] = None) -> list:
     """把旧版单Token文件(.XX_key)导入为多Token条目（按服务商+Token去重，可重复调用）"""
     known = {(t['provider'], t['token']) for t in tokens}
-    for p in list_providers():
-        path = os.path.join(_get_config_dir(), f'.{p["key"]}_key')
+    config_dir = _get_config_dir(user)
+    for p in list_providers(user):
+        path = os.path.join(config_dir, f'.{p["key"]}_key')
         try:
             if not os.path.exists(path):
                 continue
@@ -630,8 +688,8 @@ def _migrate_legacy_keys(tokens: list) -> list:
     return tokens
 
 
-def _load_tokens() -> list:
-    path = os.path.join(_get_config_dir(), TOKENS_FILE)
+def _load_tokens(user: Optional[str] = None) -> list:
+    path = os.path.join(_get_config_dir(user), TOKENS_FILE)
     tokens = []
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -641,80 +699,83 @@ def _load_tokens() -> list:
     except Exception:
         tokens = []
     before = len(tokens)
-    tokens = _migrate_legacy_keys(tokens)
+    tokens = _migrate_legacy_keys(tokens, user)
     path_exists = os.path.exists(path)
     if len(tokens) != before or not path_exists:
-        _write_tokens(tokens)
+        _write_tokens(tokens, user)
     return tokens
 
 
-def list_tokens(provider_key: str = '') -> list:
+def list_tokens(provider_key: str = '', user: Optional[str] = None) -> list:
     """全部已保存Token（可按服务商过滤），按保存时间倒序"""
-    tokens = _load_tokens()
+    tokens = _load_tokens(user)
     if provider_key:
         tokens = [t for t in tokens if t['provider'] == provider_key]
     return sorted(tokens, key=lambda t: t.get('saved_at', ''), reverse=True)
 
 
-def add_token(provider_key: str, api_key: str, note: str = '') -> tuple:
+def add_token(provider_key: str, api_key: str, note: str = '', user: Optional[str] = None) -> tuple:
     """新增Token；同一服务商下相同Token则更新备注（upsert）
     返回(是否成功, 消息, 是否为新增)"""
-    provider = get_provider_by_key(provider_key)
+    provider = get_provider_by_key(provider_key, user)
     if not provider:
         reason = '自定义服务商不存在' if provider_key.startswith('custom') else '未知的服务商'
         return False, reason, False
     if not provider.validate_api_key(api_key):
         return False, 'API Key 格式不正确', False
-    tokens = _load_tokens()
-    for t in tokens:
-        if t['provider'] == provider_key and t['token'] == api_key:
-            if str(note or '').strip():
-                t['note'] = str(note).strip()
-            t['saved_at'] = datetime.now().isoformat()
-            _write_tokens(tokens)
-            return True, '该Token已存在，备注已更新', False
-    tokens.append({
-        'id': 't_' + secrets.token_hex(4),
-        'provider': provider_key,
-        'token': api_key,
-        'note': str(note or '').strip(),
-        'saved_at': datetime.now().isoformat()
-    })
-    _write_tokens(tokens)
-    return True, 'Token已保存', True
+    with _STORAGE_LOCK:
+        tokens = _load_tokens(user)
+        for t in tokens:
+            if t['provider'] == provider_key and t['token'] == api_key:
+                if str(note or '').strip():
+                    t['note'] = str(note).strip()
+                t['saved_at'] = datetime.now().isoformat()
+                _write_tokens(tokens, user)
+                return True, '该Token已存在，备注已更新', False
+        tokens.append({
+            'id': 't_' + secrets.token_hex(4),
+            'provider': provider_key,
+            'token': api_key,
+            'note': str(note or '').strip(),
+            'saved_at': datetime.now().isoformat()
+        })
+        _write_tokens(tokens, user)
+        return True, 'Token已保存', True
 
 
-def update_token_note(token_id: str, note: str) -> bool:
+def update_token_note(token_id: str, note: str, user: Optional[str] = None) -> bool:
     """更新某条Token的备注"""
-    tokens = _load_tokens()
-    for t in tokens:
-        if t['id'] == token_id:
-            t['note'] = str(note or '').strip()
-            _write_tokens(tokens)
+    with _STORAGE_LOCK:
+        tokens = _load_tokens(user)
+        for t in tokens:
+            if t['id'] == token_id:
+                t['note'] = str(note or '').strip()
+                _write_tokens(tokens, user)
+                return True
+        return False
+
+
+def delete_token(token_id: str, user: Optional[str] = None) -> bool:
+    with _STORAGE_LOCK:
+        tokens = _load_tokens(user)
+        rest = [t for t in tokens if t['id'] != token_id]
+        if len(rest) != len(tokens):
+            _write_tokens(rest, user)
             return True
-    return False
+        return False
 
 
-def delete_token(token_id: str) -> bool:
-    tokens = _load_tokens()
-    rest = [t for t in tokens if t['id'] != token_id]
-    if len(rest) != len(tokens):
-        _write_tokens(rest)
-        return True
-    return False
-
-
-def get_token(token_id: str) -> Optional[dict]:
+def get_token(token_id: str, user: Optional[str] = None) -> Optional[dict]:
     """按id取单条Token"""
-    for t in _load_tokens():
+    for t in _load_tokens(user):
         if t['id'] == token_id:
             return t
     return None
 
 
-def get_custom_provider(key: str) -> Optional[CustomProvider]:
+def get_custom_provider(key: str, user: Optional[str] = None) -> Optional[CustomProvider]:
     """按key返回已配置的自定义服务商（key形如custom_xxxx），不存在返回None"""
-    cfg = get_custom_configs().get(key)
+    cfg = get_custom_configs(user).get(key)
     if not cfg or not cfg.get('base_url'):
         return None
     return CustomProvider(cfg, key=key)
@@ -856,7 +917,7 @@ class TokenBalanceChecker:
             return False, None, f"查询失败: {str(e)}"
 
 
-def list_providers() -> List[Dict[str, str]]:
+def list_providers(user: Optional[str] = None) -> List[Dict[str, str]]:
     """列出所有支持的提供商：内置 + 各自定义服务商 + 末尾的"自定义"新增入口"""
     providers = []
     for provider in API_PROVIDERS.values():
@@ -865,7 +926,7 @@ def list_providers() -> List[Dict[str, str]]:
             'name': provider.name,
             'dashboard': provider.dashboard_url
         })
-    for cid, cfg in get_custom_configs().items():
+    for cid, cfg in get_custom_configs(user).items():
         if cfg.get('base_url'):
             providers.append({
                 'key': cid,
@@ -876,10 +937,10 @@ def list_providers() -> List[Dict[str, str]]:
     return providers
 
 
-def get_provider_by_key(key: str) -> Optional[APIProvider]:
+def get_provider_by_key(key: str, user: Optional[str] = None) -> Optional[APIProvider]:
     """根据key获取提供商（custom_*为根据配置动态构建的自定义服务商）"""
     if key and key.startswith('custom'):
-        return get_custom_provider(key)
+        return get_custom_provider(key, user)
     return API_PROVIDERS.get((key or '').lower())
 
 
